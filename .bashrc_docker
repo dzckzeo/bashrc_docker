@@ -1,0 +1,83 @@
+# add the content of this file to your .bashrc and you can use the command as you want
+# Author:zhangzju@github
+# Updated:2017-04-05
+
+# get pid of a container
+alias docker-pid="sudo docker inspect --format '{{.State.Pid}}'"
+
+# get ip of a container
+alias docker-ip="sudo docker inspect --format '{{ .NetworkSettings.IPAddress }}'"
+
+# get the daemon process pid 
+alias docker-dpid="sudo echo $(pidof dockerd)"
+
+# check whether Docker is running, only for ubuntu16.04 or higher
+alias docker-status="sudo systemctl is-active docker"
+
+# enter to a container,the implementation refs from https://github.com/jpetazzo/nsenter/blob/master/docker-enter
+function docker-enter() {
+    #if [ -e $(dirname "$0")/nsenter ]; then
+    #Change for centos bash running
+    if [ -e $(dirname '$0')/nsenter ]; then
+        # with boot2docker, nsenter is not in the PATH but it is in the same folder
+        NSENTER=$(dirname "$0")/nsenter
+    else
+        # if nsenter has already been installed with path notified, here will be clarified
+        NSENTER=$(which nsenter)
+        #NSENTER=nsenter
+    fi
+    [ -z "$NSENTER" ] && echo "WARN Cannot find nsenter" && return
+
+    if [ -z "$1" ]; then
+        echo "Usage: `basename "$0"` CONTAINER [COMMAND [ARG]...]"
+        echo ""
+        echo "Enters the Docker CONTAINER and executes the specified COMMAND."
+        echo "If COMMAND is not specified, runs an interactive shell in CONTAINER."
+    else
+        PID=$(sudo docker inspect --format "{{.State.Pid}}" "$1")
+        if [ -z "$PID" ]; then
+            echo "WARN Cannot find the given container"
+            return
+        fi
+        shift
+
+        OPTS="--target $PID --mount --uts --ipc --net --pid"
+
+        if [ -z "$1" ]; then
+            # No command given.
+            # Use su to clear all host environment variables except for TERM,
+            # initialize the environment variables HOME, SHELL, USER, LOGNAME, PATH,
+            # and start a login shell.
+            #sudo $NSENTER "$OPTS" su - root
+            sudo $NSENTER --target $PID --mount --uts --ipc --net --pid su - root
+        else
+            # Use env to clear all host environment variables.
+            sudo $NSENTER --target $PID --mount --uts --ipc --net --pid env -i $@
+        fi
+    fi
+}
+
+# update the docker version
+function docker-update(){
+	if [ -e $1];then
+		sudo apt-get update
+		sudo apt-get upgrade -y
+	elif [ "$1"="f" ];then
+		sudo apt-get install apt-transport-https -y
+		sudo apt-get install -y lxc-docker
+	else 
+		sudo apt-get update -y lxc-docker 
+	fi
+}
+
+# kill all the container which is running
+alias docker-kill='docker kill $(docker ps -a -q)'
+
+# del all the stopped container
+alias docker-cleanc='docker rm $(docker ps -a -q)'
+
+# del all the dangling images
+alias docker-cleani='docker rmi $(docker images -q -f dangling=true)'
+
+# both the effects below
+alias docker-clean='dockercleanc || true && dockercleani'
